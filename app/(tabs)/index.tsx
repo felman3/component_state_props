@@ -1,98 +1,159 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { CounterDisplay } from '@/components/counter-display';
+
+const BASE_COUNT = 100;
+const MILESTONE_STEP = 25;
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const [count, setCount] = useState(BASE_COUNT);
+  const [highest, setHighest] = useState(BASE_COUNT);
+  const [lowest, setLowest] = useState(BASE_COUNT);
+  const [resets, setResets] = useState(0);
+  const [milestone, setMilestone] = useState<{ text: string; positive: boolean } | null>(null);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const milestoneTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastMilestoneRef = useRef(BASE_COUNT);
+  const bannerOpacity = useRef(new Animated.Value(0)).current;
+
+
+  const handleAdd = useCallback((step: number) => {
+    setCount((prev) => {
+      const next = prev + step;
+      setHighest((h) => Math.max(h, next));
+      return next;
+    });
+  }, []);
+
+  const handleMinus = useCallback((step: number) => {
+    setCount((prev) => {
+      const next = prev - step;
+      setLowest((l) => Math.min(l, next));
+      return next;
+    });
+  }, []);
+
+  const handleReset = useCallback(() => {
+    setCount(BASE_COUNT);
+    setResets((r) => r + 1);
+    lastMilestoneRef.current = BASE_COUNT;
+  }, []);
+
+
+  useEffect(() => {
+    const crossedUp = Math.floor(count / MILESTONE_STEP) !== Math.floor(lastMilestoneRef.current / MILESTONE_STEP);
+    if (crossedUp && count !== BASE_COUNT) {
+      lastMilestoneRef.current = count;
+      const above = count > BASE_COUNT;
+      setMilestone({ text: above ? `🚀 PALDOOOOOOOOOOO ${count}` : `⚠️ NYEEEEEEKKKKK ${count}`, positive: above });
+      Haptics.notificationAsync(
+        above ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning
+      );
+
+      Animated.sequence([
+        Animated.timing(bannerOpacity, { toValue: 1, duration: 150, useNativeDriver: true }),
+        Animated.delay(1100),
+        Animated.timing(bannerOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
+      ]).start();
+
+      if (milestoneTimeout.current) clearTimeout(milestoneTimeout.current);
+      milestoneTimeout.current = setTimeout(() => setMilestone(null), 1600);
+    } else {
+      lastMilestoneRef.current = count;
+    }
+  }, [count, bannerOpacity]);
+
+  useEffect(() => {
+    return () => {
+      if (milestoneTimeout.current) clearTimeout(milestoneTimeout.current);
+    };
+  }, []);
+
+  return (
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <View style={styles.inner}>
+      <View style={styles.headerBadge}>
+        <Text style={styles.headerBadgeText}>PABILISAN!</Text>
+      </View>
+      
+
+      {milestone && (
+        <Animated.View
+          style={[
+            styles.milestoneBanner,
+            { opacity: bannerOpacity, backgroundColor: milestone.positive ? '#16A34A' : '#B91C1C' },
+          ]}>
+          <Text style={styles.milestoneText}>{milestone.text}</Text>
+        </Animated.View>
+      )}
+
+      <CounterDisplay
+        count={count}
+        baseCount={BASE_COUNT}
+        highest={highest}
+        lowest={lowest}
+        resets={resets}
+        onAdd={handleAdd}
+        onMinus={handleMinus}
+        onReset={handleReset}
+      />
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  screen: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+  },
+  content: {
+    padding: 20,
+    paddingTop: 60,
+    paddingBottom: 60,
+    gap: 14,
     alignItems: 'center',
-    gap: 8,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  inner: {
+    width: '100%',
+    maxWidth: 380,
+    gap: 14,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  headerBadge: {
+    alignSelf: 'center',
+    backgroundColor: '#7C2D12',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  headerBadgeText: {
+    color: '#FED7AA',
+    fontWeight: '700',
+    fontSize: 12,
+    letterSpacing: 0.5,
+  },
+  title: {
+    color: 'white',
+    fontSize: 26,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  subtitle: {
+    color: '#94A3B8',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  milestoneBanner: {
+    borderRadius: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  milestoneText: {
+    color: 'white',
+    fontWeight: '800',
+    fontSize: 15,
   },
 });
